@@ -4,6 +4,7 @@ from flask import Flask, request, make_response
 import requests
 import os
 from collections import deque
+#import logging
 
 
 import ssl
@@ -13,6 +14,7 @@ ssl._create_default_https_context = ssl._create_unverified_context
 
 
 app = Flask(__name__)
+
 
 # Read the Microsoft Teams Incoming webhook URL from the environment
 teams_webhook_url = os.environ.get('TEAMS_WEBHOOK_URL')
@@ -28,9 +30,7 @@ slack_signing_secret = os.environ.get('SLACK_SIGNING_SECRET')
 dingtalk_webhook_url = os.environ.get('DINGTALK_WEBHOOK_URL')
 
 # List of organizations with their domain names
-# TODO get this from the environments
 organizations = ["@abc.com"]
-
 
 # Utility function to verify Slack requests
 def verify_slack_request(request):
@@ -76,6 +76,7 @@ event_ids = deque(maxlen=100)
 @app.route('/slack-to-teams', methods=['POST'])
 def slack_to_teams():
     # Verify if the request is from Slack
+    # print(request.json)
     if not verify_slack_request(request):
         return make_response("Request not verified", 403)
     
@@ -95,6 +96,8 @@ def slack_to_teams():
         if event_type == 'event_callback':
             event = event_data['event']
             if event['type'] == 'message':
+                if 'subtype' in event and event['subtype'] == 'message_changed':
+                    event = event['message']
                 user_id = event['user']
                 user_info = get_user_info(user_id)
                 # Only forward messages from users in specified organizations
@@ -103,6 +106,8 @@ def slack_to_teams():
                     message = event.get('text', '')
                     timestamp = event.get('ts')
                     username = user_info.get('name', 'unknown_user')
+
+                    #TODO using gunicorn logger, e.g. app.logger.info(f'Message "{message}" from {username}')
                     print(f'[INFO] Message "{message}" from {username} at {time.ctime(float(timestamp))}')
 
                     # Create Microsoft Teams message
@@ -124,5 +129,9 @@ def slack_to_teams():
     return '', 200
 
 if __name__ == '__main__':
-    # app.run(host='0.0.0.0', port=5000)
-    app.run()
+    app.run(host='0.0.0.0', port=5000)
+    # gunicorn_logger = logging.getLogger('gunicorn.error')
+    # app.logger.handlers = gunicorn_logger.handlers
+    # app.logger.setLevel(gunicorn_logger.level)
+    #app.run()
+
